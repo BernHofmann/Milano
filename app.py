@@ -78,7 +78,9 @@ STATIONS = {
     "Firenze S.M.N.": "S06421",
     "Napoli Centrale": "S09721",
     "Torino Porta Nuova": "S00219",
-    "Desenzano Del Garda": "S02084"
+    "Desenzano Del Garda": "S02084",
+    "Malpensa Flughafen (T1)": "S01146",
+    "Malpensa Flughafen (T2)": "S01147"
 }
 
 st.title("🚉 TrainBoard Pro")
