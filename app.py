@@ -26,7 +26,7 @@ with col1:
 with col2:
     mode_name = st.radio("Modus:", ["Abfahrten 🛫", "Ankünfte 🛬"], horizontal=True)
 
-@st.cache_data(ttl=30) # 30 Sekunden Cache
+@st.cache_data(ttl=30)
 def get_live_data(station_id, mode_name):
     api_mode = "partenze" if "Abfahrten" in mode_name else "arrivi"
     
@@ -56,15 +56,18 @@ def get_live_data(station_id, mode_name):
             delay = train.get('ritardo', 0)
             delay_str = f"🔴 +{delay} Min" if delay > 0 else "🟢 OK"
             
-            # Gleis-Prüfung
+            # DIE NEUE, KORRIGIERTE GLEIS-LOGIK
             if "Abfahrten" in mode_name:
-                p = train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc') or \
-                    train.get('binarioEffettivoPartenza') or train.get('binarioProgrammatoPartenza')
+                p = train.get('binarioEffettivoPartenzaDescrizione') or \
+                    train.get('binarioProgrammatoPartenzaDescrizione') or \
+                    train.get('binarioEffettivoPartenzaDesc') or \
+                    train.get('binarioProgrammatoPartenzaDesc')
             else:
-                p = train.get('binarioEffettivoArrivoDesc') or train.get('binarioProgrammatoArrivoDesc') or \
-                    train.get('binarioEffettivoArrivo') or train.get('binarioProgrammatoArrivo')
+                p = train.get('binarioEffettivoArrivoDescrizione') or \
+                    train.get('binarioProgrammatoArrivoDescrizione') or \
+                    train.get('binarioEffettivoArrivoDesc') or \
+                    train.get('binarioProgrammatoArrivoDesc')
             
-            # Vermeidet die Ausgabe von "None", wenn kein Wert vorliegt
             platform = str(p).strip() if p and str(p).strip() != "None" else "-"
 
             board_data.append({
@@ -97,8 +100,7 @@ if not df.empty:
 else:
     st.warning("Keine Daten gefunden. Versuche es in ein paar Sekunden erneut.")
 
-# --- DER DIAGNOSE BEREICH IST WIEDER DA ---
+# Diagnose Bereich
 st.divider()
 with st.expander("🛠️ Diagnose: Rohe API-Daten anzeigen"):
-    st.write("Suche im Text unten nach dem Begriff 'binario' für Züge in der Zukunft. So sehen wir, ob die Bahn die Daten sendet.")
     st.json(raw)
