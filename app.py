@@ -10,12 +10,8 @@ st.set_page_config(page_title="TrainBoard Italia", layout="wide")
 # --- MODERNES DESIGN (CSS) ---
 st.markdown("""
     <style>
-    /* Hintergrund */
-    .stApp {
-        background-color: #0e1117;
-    }
+    .stApp { background-color: #0e1117; }
     
-    /* Flexbox Layout für die Zug-Karte */
     .train-card {
         background: #1d2129;
         border-left: 5px solid #0054a6;
@@ -28,11 +24,7 @@ st.markdown("""
         align-items: center;
     }
     
-    /* Linke Seite (Zeit & Ziel) */
-    .train-left {
-        display: flex;
-        flex-direction: column;
-    }
+    .train-left { display: flex; flex-direction: column; }
     
     .train-time {
         font-size: 26px;
@@ -45,13 +37,20 @@ st.markdown("""
         font-size: 18px;
         color: #e0e0e0;
         margin-top: 4px;
+        font-weight: bold;
     }
     
-    /* Rechte Seite (Gleis, Zugnummer & Status in der ehemals leeren Ecke) */
+    .train-extra {
+        font-size: 13px;
+        color: #a0a0a0;
+        margin-top: 4px;
+    }
+    
     .train-right {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
+        min-width: 110px;
     }
     
     .train-platform {
@@ -61,21 +60,21 @@ st.markdown("""
         border-radius: 5px;
         font-weight: bold;
         font-size: 14px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     
-    .train-name {
-        font-size: 14px;
-        color: #888;
-        margin-bottom: 3px;
-    }
+    .status-ok { color: #2ecc71; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+    .status-delay { color: #e74c3c; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
     
-    .status-ok { color: #2ecc71; font-weight: bold; font-size: 15px; }
-    .status-delay { color: #e74c3c; font-weight: bold; font-size: 15px; }
+    .train-state {
+        font-size: 12px;
+        font-style: italic;
+        color: #bdc3c7;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- BAHNHÖFE (inkl. Verona und Venedig) ---
+# --- BAHNHÖFE ---
 STATIONS = {
     "Milano Centrale": "S01700",
     "Roma Termini": "S09218",
@@ -136,6 +135,7 @@ if raw_data:
         train_name = f"{train.get('categoriaDescrizione', '')} {train.get('numeroTreno', '')}".strip()
         delay = train.get('ritardo', 0)
         
+        # 1. Gleis ermitteln
         if "Abfahrten" in mode_name:
             p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione') or train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc')
         else:
@@ -146,20 +146,51 @@ if raw_data:
         if search_query.lower() not in location.lower() and search_query.lower() not in train_name.lower():
             continue
 
+        # 2. Visuelle Emojis für Zugtypen
+        if "FR" in train_name or "Italo" in train_name:
+            icon = "🚄"
+        elif "EC" in train_name or "IC" in train_name or "EN" in train_name:
+            icon = "🚅"
+        else:
+            icon = "🚆"
+
+        # 3. Wagenreihung (Die API sendet eine Liste mit Sprachen, Index 2 ist Deutsch!)
+        orientamento = train.get('compOrientamento', [])
+        orientation_text = ""
+        if orientamento and isinstance(orientamento, list) and len(orientamento) > 2 and orientamento[2] != "--":
+            orientation_text = f" | ℹ️ {orientamento[2]}"
+
+        # 4. Zugstatus (Steht am Gleis, Abgefahren, etc.)
+        in_stazione = train.get('inStazione', False)
+        non_partito = train.get('nonPartito', True)
+        
+        train_state_text = ""
+        if "Abfahrten" in mode_name:
+            if not non_partito:
+                train_state_text = "🛫 Abgefahren"
+            elif in_stazione:
+                train_state_text = "🚉 Steht bereit"
+        else:
+            if train.get('arrivato', False):
+                train_state_text = "🛬 Angekommen"
+            elif in_stazione:
+                train_state_text = "🚉 Fährt ein"
+
         status_class = "status-delay" if delay > 0 else "status-ok"
         status_text = f"+{delay} Min" if delay > 0 else "Pünktlich"
         
-        # NEUES HTML LAYOUT
+        # HTML LAYOUT mit neuen Datenfeldern
         st.markdown(f"""
             <div class="train-card">
                 <div class="train-left">
                     <div class="train-time">{time}</div>
                     <div class="train-dest">{location}</div>
+                    <div class="train-extra">{icon} {train_name}{orientation_text}</div>
                 </div>
                 <div class="train-right">
                     <div class="train-platform">Gleis {platform}</div>
-                    <div class="train-name">{train_name}</div>
                     <div class="{status_class}">{status_text}</div>
+                    <div class="train-state">{train_state_text}</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
