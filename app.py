@@ -75,13 +75,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- BAHNHÖFE (inkl. Desenzano Del Garda) ---
 STATIONS = {
     "Milano Centrale": "S01700",
     "Roma Termini": "S09218",
     "Venezia S. Lucia": "S02716",
     "Firenze S.M.N.": "S06421",
     "Napoli Centrale": "S09721",
-    "Torino Porta Nuova": "S00219"
+    "Torino Porta Nuova": "S00219",
+    "Desenzano Del Garda": "S02084"
 }
 
 # --- HEADER ---
@@ -146,7 +148,7 @@ if raw_data:
         status_class = "status-delay" if delay > 0 else "status-ok"
         status_text = f"+{delay} Min" if delay > 0 else "Pünktlich"
         
-        # NEUES HTML LAYOUT (Füllt die leere Ecke)
+        # NEUES HTML LAYOUT
         st.markdown(f"""
             <div class="train-card">
                 <div class="train-left">
