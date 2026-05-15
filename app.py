@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import datetime
 import urllib.parse
+import time # NEU: Für die Auto-Refresh Timeline
 
 # --- SEITEN-KONFIGURATION ---
 st.set_page_config(page_title="TrainBoard Italia Pro", layout="wide")
@@ -118,7 +119,6 @@ def get_live_data(station_id, mode_name):
 # --- API LOGIK: STRECKENVERLAUF ---
 @st.cache_data(ttl=30)
 def get_route_data(origin_id, train_num, timestamp):
-    # HIER IST DER FIX: Die URL enthält nun den nötigen Zeitstempel am Ende!
     url = f"http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/andamentoTreno/{origin_id}/{train_num}/{timestamp}"
     try:
         response = requests.get(url, timeout=10)
@@ -128,25 +128,22 @@ def get_route_data(origin_id, train_num, timestamp):
     except:
         return None
 
-# --- REFRESH BUTTON ---
-if st.button("🔄 Aktualisieren", use_container_width=True):
-    get_live_data.clear()
-    get_route_data.clear()
-    st.rerun()
+# --- AUTO REFRESH TIMELINE (Platzhalter oben) ---
+refresh_placeholder = st.empty()
 
 # --- DATEN ANZEIGEN ---
 raw_data = get_live_data(station_id, mode_name)
 
 if raw_data:
     for train in raw_data:
-        time = train.get('compOrarioPartenza' if "Abfahrten" in mode_name else 'compOrarioArrivo', '--:--')
+        # WICHTIG: 'time' wurde in 'time_val' umbenannt, damit das 'time' Modul für den Refresh-Timer nicht überschrieben wird!
+        time_val = train.get('compOrarioPartenza' if "Abfahrten" in mode_name else 'compOrarioArrivo', '--:--')
         location = train.get('destinazione' if "Abfahrten" in mode_name else 'origine', 'Unbekannt')
         train_num = str(train.get('numeroTreno', ''))
         train_name = f"{train.get('categoriaDescrizione', '')} {train_num}".strip()
         origin_id = train.get('codOrigine', 'S01700')
         delay = train.get('ritardo', 0)
         
-        # Den Datums-Stempel (Timestamp in Millisekunden) für die Routen-API auslesen!
         train_timestamp = train.get('dataPartenzaTreno') or train.get('millisDataPartenza')
         
         if "Abfahrten" in mode_name:
@@ -194,7 +191,7 @@ if raw_data:
         st.markdown(f"""
             <div class="train-card">
                 <div class="train-left">
-                    <div class="train-time">{time}</div>
+                    <div class="train-time">{time_val}</div>
                     <div class="train-dest">{location}</div>
                     <div class="train-extra">{icon} {train_name}{orientation_text}</div>
                 </div>
@@ -206,7 +203,6 @@ if raw_data:
             </div>
         """, unsafe_allow_html=True)
 
-        # STRECKENVERLAUF EINBAUEN
         with st.expander("🛤️ Streckenverlauf & Zwischenstopps"):
             if not train_timestamp:
                 st.warning("Zeitstempel fehlt. Die Bahn blockiert aktuell die Abfrage für diesen Zug.")
@@ -219,21 +215,19 @@ if raw_data:
                         for stop in route['fermate']:
                             stop_name = stop.get('stazione', 'Unbekannt')
                             
-                            # API Struktur der Bahn: Zeiten kommen oft nur als Millisekunden-Zahlen (Timestamp)
                             t_expected = stop.get('programmata')
                             
                             if t_expected:
                                 dt_utc = datetime.datetime.utcfromtimestamp(t_expected / 1000)
-                                dt_italy = dt_utc + datetime.timedelta(hours=2) # Sommerzeit in Italien anrechnen
+                                dt_italy = dt_utc + datetime.timedelta(hours=2) 
                                 s_time = dt_italy.strftime('%H:%M')
                             else:
                                 s_time = stop.get('compOrarioArrivo') or stop.get('compOrarioPartenza') or "--:--"
                                 
                             s_delay = stop.get('ritardoArrivo') or stop.get('ritardoPartenza') or 0
                             
-                            # Prüfen ob der Zug die Station schon passiert hat
                             is_done = stop.get('arrivoReale') or stop.get('partenzaReale') or stop.get('effettiva')
-                            dot_color = "#2ecc71" if is_done else "#30363d" # Grün = passiert, Grau = Zukunft
+                            dot_color = "#2ecc71" if is_done else "#30363d"
                             
                             s_delay_text = f" <span class='stop-delay'>(+{s_delay})</span>" if s_delay > 0 else ""
                             
@@ -249,3 +243,14 @@ if raw_data:
                         st.warning("Streckenverlauf derzeit nicht verfügbar.")
 else:
     st.info("Warten auf Live-Daten...")
+
+# --- AUTO REFRESH LOGIK GANZ AM ENDE ---
+# Diese Schleife läuft 5 Sekunden, aktualisiert oben den Balken und startet die App dann neu
+for step in range(100):
+    time.sleep(0.30) # 100 Schritte * 0.05 Sekunden = 5 Sekunden Wartezeit
+    seconds_left = 5 - (step // 20)
+    refresh_placeholder.progress(step + 1, text=f"🔄 Auto-Refresh in {seconds_left} Sekunden...")
+
+get_live_data.clear()
+get_route_data.clear()
+st.rerun()
