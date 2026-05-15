@@ -135,7 +135,6 @@ if raw_data:
         train_name = f"{train.get('categoriaDescrizione', '')} {train.get('numeroTreno', '')}".strip()
         delay = train.get('ritardo', 0)
         
-        # 1. Gleis ermitteln
         if "Abfahrten" in mode_name:
             p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione') or train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc')
         else:
@@ -146,7 +145,6 @@ if raw_data:
         if search_query.lower() not in location.lower() and search_query.lower() not in train_name.lower():
             continue
 
-        # 2. Visuelle Emojis für Zugtypen
         if "FR" in train_name or "Italo" in train_name:
             icon = "🚄"
         elif "EC" in train_name or "IC" in train_name or "EN" in train_name:
@@ -154,32 +152,32 @@ if raw_data:
         else:
             icon = "🚆"
 
-        # 3. Wagenreihung (Die API sendet eine Liste mit Sprachen, Index 2 ist Deutsch!)
         orientamento = train.get('compOrientamento', [])
         orientation_text = ""
         if orientamento and isinstance(orientamento, list) and len(orientamento) > 2 and orientamento[2] != "--":
             orientation_text = f" | ℹ️ {orientamento[2]}"
 
-        # 4. Zugstatus (Steht am Gleis, Abgefahren, etc.)
+        # --- KORRIGIERTER ZUGSTATUS ---
         in_stazione = train.get('inStazione', False)
         non_partito = train.get('nonPartito', True)
         
         train_state_text = ""
         if "Abfahrten" in mode_name:
-            if not non_partito:
-                train_state_text = "🛫 Abgefahren"
-            elif in_stazione:
-                train_state_text = "🚉 Steht bereit"
+            if in_stazione:
+                train_state_text = "🚉 Am Bahnsteig"
+            elif not non_partito:
+                train_state_text = "🚄 Unterwegs" # Geändert von "Abgefahren" auf "Unterwegs"
         else:
             if train.get('arrivato', False):
                 train_state_text = "🛬 Angekommen"
             elif in_stazione:
-                train_state_text = "🚉 Fährt ein"
+                train_state_text = "🚉 Am Bahnsteig"
+            elif not non_partito:
+                train_state_text = "🚄 Unterwegs"
 
         status_class = "status-delay" if delay > 0 else "status-ok"
         status_text = f"+{delay} Min" if delay > 0 else "Pünktlich"
         
-        # HTML LAYOUT mit neuen Datenfeldern
         st.markdown(f"""
             <div class="train-card">
                 <div class="train-left">
