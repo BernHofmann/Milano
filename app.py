@@ -26,7 +26,7 @@ with col1:
 with col2:
     mode_name = st.radio("Modus:", ["Abfahrten 🛫", "Ankünfte 🛬"], horizontal=True)
 
-@st.cache_data(ttl=30) # Schnellerer Cache für aktuellere Gleis-Infos
+@st.cache_data(ttl=30) # 30 Sekunden Cache
 def get_live_data(station_id, mode_name):
     api_mode = "partenze" if "Abfahrten" in mode_name else "arrivi"
     
@@ -49,19 +49,14 @@ def get_live_data(station_id, mode_name):
         
         board_data = []
         for train in data:
-            # Zeit & Ziel
             time = train.get('compOrarioPartenza' if "Abfahrten" in mode_name else 'compOrarioArrivo', '--:--')
             location = train.get('destinazione' if "Abfahrten" in mode_name else 'origine', 'Unbekannt')
-            
-            # Zug-Info
             train_name = f"{train.get('categoriaDescrizione', '')} {train.get('numeroTreno', '')}".strip()
             
-            # Verspätung
             delay = train.get('ritardo', 0)
             delay_str = f"🔴 +{delay} Min" if delay > 0 else "🟢 OK"
             
-            # GLEIS-LOGIK (Verbessert)
-            # Wir prüfen nacheinander alle möglichen Felder, die die API für Gleise nutzt
+            # Gleis-Prüfung
             if "Abfahrten" in mode_name:
                 p = train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc') or \
                     train.get('binarioEffettivoPartenza') or train.get('binarioProgrammatoPartenza')
@@ -69,10 +64,9 @@ def get_live_data(station_id, mode_name):
                 p = train.get('binarioEffettivoArrivoDesc') or train.get('binarioProgrammatoArrivoDesc') or \
                     train.get('binarioEffettivoArrivo') or train.get('binarioProgrammatoArrivo')
             
-            platform = str(p).strip() if p else "-"
+            # Vermeidet die Ausgabe von "None", wenn kein Wert vorliegt
+            platform = str(p).strip() if p and str(p).strip() != "None" else "-"
 
-            # WICHTIG: Die Reihenfolge hier bestimmt die Spalten in der App!
-            # Gleis steht jetzt an 2. Stelle für bessere Sichtbarkeit auf dem iPhone
             board_data.append({
                 "Zeit": time,
                 "Gleis": platform,
@@ -82,8 +76,8 @@ def get_live_data(station_id, mode_name):
             })
             
         return pd.DataFrame(board_data), data
-    except:
-        return pd.DataFrame(), {"error": "API Fehler"}
+    except Exception as e:
+        return pd.DataFrame(), {"error": str(e)}
 
 # UI für Update
 if st.button("🔄 Aktualisieren", use_container_width=True):
@@ -94,13 +88,17 @@ if st.button("🔄 Aktualisieren", use_container_width=True):
 df, raw = get_live_data(station_id, mode_name)
 
 if not df.empty:
-    # Suchfilter
     search = st.text_input("🔍 Filter (z.B. Ziel oder Zugnummer):")
     if search:
         mask = df.astype(str).apply(lambda x: x.str.contains(search, case=False)).any(axis=1)
         df = df[mask]
     
-    # Anzeige der Tabelle
     st.dataframe(df, hide_index=True, use_container_width=True)
 else:
     st.warning("Keine Daten gefunden. Versuche es in ein paar Sekunden erneut.")
+
+# --- DER DIAGNOSE BEREICH IST WIEDER DA ---
+st.divider()
+with st.expander("🛠️ Diagnose: Rohe API-Daten anzeigen"):
+    st.write("Suche im Text unten nach dem Begriff 'binario' für Züge in der Zukunft. So sehen wir, ob die Bahn die Daten sendet.")
+    st.json(raw)
