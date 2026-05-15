@@ -87,7 +87,7 @@ STATIONS = {
 }
 
 # --- HEADER ---
-st.title("🚉 TrainBoard")
+st.title("🚉 Zug Tafel von Alex")
 
 # --- EINSTELLUNGEN ---
 with st.expander("⚙️ Einstellungen & Filter"):
