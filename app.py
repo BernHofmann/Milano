@@ -10,12 +10,12 @@ st.set_page_config(page_title="TrainBoard Italia", layout="wide")
 # --- MODERNES DESIGN (CSS) ---
 st.markdown("""
     <style>
-    /* Hintergrund und Schriftart */
+    /* Hintergrund */
     .stApp {
         background-color: #0e1117;
     }
     
-    /* Zug-Karte Design */
+    /* Flexbox Layout für die Zug-Karte */
     .train-card {
         background: #1d2129;
         border-left: 5px solid #0054a6;
@@ -23,36 +23,55 @@ st.markdown("""
         padding: 15px;
         margin-bottom: 12px;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    /* Linke Seite (Zeit & Ziel) */
+    .train-left {
+        display: flex;
+        flex-direction: column;
     }
     
     .train-time {
-        font-size: 24px;
+        font-size: 26px;
         font-weight: bold;
         color: #ffffff;
-    }
-    
-    .train-platform {
-        background: #f1c40f;
-        color: #000;
-        padding: 2px 8px;
-        border-radius: 5px;
-        font-weight: bold;
-        float: right;
+        line-height: 1.1;
     }
     
     .train-dest {
         font-size: 18px;
         color: #e0e0e0;
-        margin-top: 5px;
+        margin-top: 4px;
     }
     
-    .train-info {
+    /* Rechte Seite (Gleis, Zugnummer & Status in der ehemals leeren Ecke) */
+    .train-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    
+    .train-platform {
+        background: #f1c40f;
+        color: #000;
+        padding: 4px 10px;
+        border-radius: 5px;
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+    
+    .train-name {
         font-size: 14px;
         color: #888;
+        margin-bottom: 3px;
     }
     
-    .status-ok { color: #2ecc71; font-weight: bold; }
-    .status-delay { color: #e74c3c; font-weight: bold; }
+    .status-ok { color: #2ecc71; font-weight: bold; font-size: 15px; }
+    .status-delay { color: #e74c3c; font-weight: bold; font-size: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -78,7 +97,7 @@ with st.expander("⚙️ Einstellungen & Filter"):
         mode_name = st.radio("Modus:", ["Abfahrten", "Ankünfte"], horizontal=True)
     search_query = st.text_input("🔍 Suchen (Zug oder Ziel)...")
 
-# --- API LOGIK (Unverändert stabil) ---
+# --- API LOGIK ---
 @st.cache_data(ttl=30)
 def get_live_data(station_id, mode_name):
     api_mode = "partenze" if "Abfahrten" in mode_name else "arrivi"
@@ -109,40 +128,37 @@ raw_data = get_live_data(station_id, mode_name)
 
 if raw_data:
     for train in raw_data:
-        # Daten extrahieren
         time = train.get('compOrarioPartenza' if "Abfahrten" in mode_name else 'compOrarioArrivo', '--:--')
         location = train.get('destinazione' if "Abfahrten" in mode_name else 'origine', 'Unbekannt')
         train_name = f"{train.get('categoriaDescrizione', '')} {train.get('numeroTreno', '')}".strip()
         delay = train.get('ritardo', 0)
         
-        # Gleis Logik
         if "Abfahrten" in mode_name:
-            p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione')
+            p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione') or train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc')
         else:
-            p = train.get('binarioEffettivoArrivoDescrizione') or train.get('binarioProgrammatoArrivoDescrizione')
-        platform = str(p).strip() if p else "-"
+            p = train.get('binarioEffettivoArrivoDescrizione') or train.get('binarioProgrammatoArrivoDescrizione') or train.get('binarioEffettivoArrivoDesc') or train.get('binarioProgrammatoArrivoDesc')
+        
+        platform = str(p).strip() if p and str(p).strip() != "None" else "-"
 
-        # Filterprüfung
         if search_query.lower() not in location.lower() and search_query.lower() not in train_name.lower():
             continue
 
-        # MODERNES KARTEN-TEMPLATE (HTML)
         status_class = "status-delay" if delay > 0 else "status-ok"
         status_text = f"+{delay} Min" if delay > 0 else "Pünktlich"
         
+        # NEUES HTML LAYOUT (Füllt die leere Ecke)
         st.markdown(f"""
             <div class="train-card">
-                <span class="train-platform">Gleis {platform}</span>
-                <div class="train-time">{time}</div>
-                <div class="train-dest">{location}</div>
-                <div class="train-info">
-                    {train_name} • <span class="{status_class}">{status_text}</span>
+                <div class="train-left">
+                    <div class="train-time">{time}</div>
+                    <div class="train-dest">{location}</div>
+                </div>
+                <div class="train-right">
+                    <div class="train-platform">Gleis {platform}</div>
+                    <div class="train-name">{train_name}</div>
+                    <div class="{status_class}">{status_text}</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 else:
     st.info("Warten auf Live-Daten...")
-
-# --- DIAGNOSE (Dezenter am Ende) ---
-with st.expander("🛠️ Rohdaten"):
-    st.json(raw_data)
