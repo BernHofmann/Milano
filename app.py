@@ -12,7 +12,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #0e1117; }
     
-    /* Hauptkarte */
     .train-card {
         background: #1d2129;
         border-left: 5px solid #0054a6;
@@ -30,8 +29,9 @@ st.markdown("""
     .train-right { display: flex; flex-direction: column; align-items: flex-end; min-width: 110px; }
     .train-platform { background: #f1c40f; color: #000; padding: 4px 10px; border-radius: 5px; font-weight: bold; font-size: 14px; margin-bottom: 8px; }
     
-    .status-ok { color: #2ecc71; font-weight: bold; font-size: 14px; }
-    .status-delay { color: #e74c3c; font-weight: bold; font-size: 14px; }
+    .status-ok { color: #2ecc71; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+    .status-delay { color: #e74c3c; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+    .train-state { font-size: 12px; font-style: italic; color: #bdc3c7; }
     
     /* Streckenverlauf Design */
     .route-container {
@@ -52,16 +52,24 @@ st.markdown("""
     }
     
     .stop-dot {
-        height: 12px; width: 12px; background-color: #0054a6;
+        height: 12px; width: 12px;
         border-radius: 50%; position: absolute; left: -7px; top: 12px;
+        border: 2px solid #161b22;
     }
     
-    .stop-time { min-width: 60px; font-size: 14px; color: #ffffff; font-weight: bold; margin-left: 15px; }
-    .stop-station { font-size: 14px; color: #bdc3c7; flex-grow: 1; }
-    .stop-delay { font-size: 12px; color: #e74c3c; margin-left: 10px; }
+    .stop-time { min-width: 50px; font-size: 14px; color: #ffffff; font-weight: bold; margin-left: 15px; }
+    .stop-station { font-size: 14px; color: #e0e0e0; flex-grow: 1; margin-left: 10px;}
+    .stop-delay { font-size: 12px; color: #e74c3c; font-weight: bold; }
+    
+    .streamlit-expanderHeader {
+        background-color: #1d2129 !important;
+        border-radius: 0 0 10px 10px !important;
+        border: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
+# --- BAHNHÖFE ---
 STATIONS = {
     "Milano Centrale": "S01700",
     "Roma Termini": "S09218",
@@ -76,45 +84,59 @@ STATIONS = {
 st.title("🚉 TrainBoard Pro")
 
 # --- EINSTELLUNGEN ---
-with st.expander("⚙️ Bahnhof & Filter"):
+with st.expander("⚙️ Einstellungen & Filter"):
     col1, col2 = st.columns(2)
     with col1:
         selected_station_name = st.selectbox("Bahnhof:", list(STATIONS.keys()))
         station_id = STATIONS[selected_station_name]
     with col2:
         mode_name = st.radio("Modus:", ["Abfahrten", "Ankünfte"], horizontal=True)
-    search_query = st.text_input("🔍 Zug oder Stadt suchen...")
+    search_query = st.text_input("🔍 Suchen (Zug oder Ziel)...")
 
-# --- API: HAUPTLISTE ---
+# --- API LOGIK: HAUPTLISTE ---
 @st.cache_data(ttl=30)
 def get_live_data(station_id, mode_name):
     api_mode = "partenze" if "Abfahrten" in mode_name else "arrivi"
-    now = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
-    date_str = now.strftime("%a %b %d %Y %H:%M:%S GMT+0200")
-    url = f"http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/{api_mode}/{station_id}/{urllib.parse.quote(date_str)}"
+    now_utc = datetime.datetime.utcnow()
+    italy_time = now_utc + datetime.timedelta(hours=2) 
+    
+    days_en = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months_en = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    date_str = f"{days_en[italy_time.weekday()]} {months_en[italy_time.month - 1]} {italy_time.day:02d} {italy_time.year} {italy_time.hour:02d}:{italy_time.minute:02d}:{italy_time.second:02d} GMT+0200"
+    encoded_date = urllib.parse.quote(date_str)
+    
+    url = f"http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/{api_mode}/{station_id}/{encoded_date}"
+    
     try:
-        return requests.get(url, timeout=10).json()
+        response = requests.get(url, timeout=10)
+        return response.json()
     except:
         return []
 
-# --- API: STRECKENVERLAUF ---
-def get_route_data(origin_id, train_num):
-    # Die API braucht den Startbahnhof und die Zugnummer
-    url = f"http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/andamentoTreno/{origin_id}/{train_num}"
+# --- API LOGIK: STRECKENVERLAUF ---
+@st.cache_data(ttl=30)
+def get_route_data(origin_id, train_num, timestamp):
+    # HIER IST DER FIX: Die URL enthält nun den nötigen Zeitstempel am Ende!
+    url = f"http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/andamentoTreno/{origin_id}/{train_num}/{timestamp}"
     try:
-        return requests.get(url, timeout=10).json()
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        return None
     except:
         return None
 
+# --- REFRESH BUTTON ---
 if st.button("🔄 Aktualisieren", use_container_width=True):
     get_live_data.clear()
+    get_route_data.clear()
     st.rerun()
 
+# --- DATEN ANZEIGEN ---
 raw_data = get_live_data(station_id, mode_name)
 
 if raw_data:
     for train in raw_data:
-        # Basisdaten
         time = train.get('compOrarioPartenza' if "Abfahrten" in mode_name else 'compOrarioArrivo', '--:--')
         location = train.get('destinazione' if "Abfahrten" in mode_name else 'origine', 'Unbekannt')
         train_num = str(train.get('numeroTreno', ''))
@@ -122,55 +144,106 @@ if raw_data:
         origin_id = train.get('codOrigine', 'S01700')
         delay = train.get('ritardo', 0)
         
-        # Gleis
-        p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione') or train.get('binarioEffettivoPartenzaDesc')
+        # Den Datums-Stempel (Timestamp in Millisekunden) für die Routen-API auslesen!
+        train_timestamp = train.get('dataPartenzaTreno') or train.get('millisDataPartenza')
+        
+        if "Abfahrten" in mode_name:
+            p = train.get('binarioEffettivoPartenzaDescrizione') or train.get('binarioProgrammatoPartenzaDescrizione') or train.get('binarioEffettivoPartenzaDesc') or train.get('binarioProgrammatoPartenzaDesc')
+        else:
+            p = train.get('binarioEffettivoArrivoDescrizione') or train.get('binarioProgrammatoArrivoDescrizione') or train.get('binarioEffettivoArrivoDesc') or train.get('binarioProgrammatoArrivoDesc')
+        
         platform = str(p).strip() if p and str(p).strip() != "None" else "-"
 
         if search_query.lower() not in location.lower() and search_query.lower() not in train_name.lower():
             continue
 
-        # Design-Elemente
-        icon = "🚄" if "FR" in train_name else "🚅" if "IC" in train_name or "EC" in train_name else "🚆"
+        if "FR" in train_name or "Italo" in train_name:
+            icon = "🚄"
+        elif "EC" in train_name or "IC" in train_name or "EN" in train_name:
+            icon = "🚅"
+        else:
+            icon = "🚆"
+
+        orientamento = train.get('compOrientamento', [])
+        orientation_text = ""
+        if orientamento and isinstance(orientamento, list) and len(orientamento) > 2 and orientamento[2] != "--":
+            orientation_text = f" | ℹ️ {orientamento[2]}"
+
+        in_stazione = train.get('inStazione', False)
+        non_partito = train.get('nonPartito', True)
+        
+        train_state_text = ""
+        if "Abfahrten" in mode_name:
+            if in_stazione:
+                train_state_text = "🚉 Am Bahnsteig"
+            elif not non_partito:
+                train_state_text = "🚄 Unterwegs"
+        else:
+            if train.get('arrivato', False):
+                train_state_text = "🛬 Angekommen"
+            elif in_stazione:
+                train_state_text = "🚉 Am Bahnsteig"
+            elif not non_partito:
+                train_state_text = "🚄 Unterwegs"
+
         status_class = "status-delay" if delay > 0 else "status-ok"
         status_text = f"+{delay} Min" if delay > 0 else "Pünktlich"
         
-        # 1. Die Karte anzeigen
         st.markdown(f"""
             <div class="train-card">
                 <div class="train-left">
                     <div class="train-time">{time}</div>
                     <div class="train-dest">{location}</div>
-                    <div class="train-extra">{icon} {train_name}</div>
+                    <div class="train-extra">{icon} {train_name}{orientation_text}</div>
                 </div>
                 <div class="train-right">
                     <div class="train-platform">Gleis {platform}</div>
                     <div class="{status_class}">{status_text}</div>
+                    <div class="train-state">{train_state_text}</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-        # 2. Der "Klickbare" Bereich (Expander)
+        # STRECKENVERLAUF EINBAUEN
         with st.expander("🛤️ Streckenverlauf & Zwischenstopps"):
-            with st.spinner("Lade Haltestellen..."):
-                route = get_route_data(origin_id, train_num)
-                if route and 'fermate' in route:
-                    st.markdown('<div class="route-container">', unsafe_allow_html=True)
-                    for stop in route['fermate']:
-                        stop_name = stop.get('stazione', 'Unbekannt')
-                        # Zeit (Ankunft oder Abfahrt je nach Verfügbarkeit)
-                        s_time = stop.get('compOrarioArrivo') or stop.get('compOrarioPartenza') or "--:--"
-                        s_delay = stop.get('ritardo', 0)
-                        s_delay_text = f" (+{s_delay})" if s_delay > 0 else ""
-                        
-                        st.markdown(f"""
-                            <div class="stop-row">
-                                <div class="stop-dot"></div>
-                                <div class="stop-time">{s_time}</div>
-                                <div class="stop-station">{stop_name} <span class="stop-delay">{s_delay_text}</span></div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    st.warning("Streckenverlauf derzeit nicht verfügbar.")
+            if not train_timestamp:
+                st.warning("Zeitstempel fehlt. Die Bahn blockiert aktuell die Abfrage für diesen Zug.")
+            else:
+                with st.spinner("Lade Haltestellen..."):
+                    route = get_route_data(origin_id, train_num, train_timestamp)
+                    
+                    if route and 'fermate' in route:
+                        st.markdown('<div class="route-container">', unsafe_allow_html=True)
+                        for stop in route['fermate']:
+                            stop_name = stop.get('stazione', 'Unbekannt')
+                            
+                            # API Struktur der Bahn: Zeiten kommen oft nur als Millisekunden-Zahlen (Timestamp)
+                            t_expected = stop.get('programmata')
+                            
+                            if t_expected:
+                                dt_utc = datetime.datetime.utcfromtimestamp(t_expected / 1000)
+                                dt_italy = dt_utc + datetime.timedelta(hours=2) # Sommerzeit in Italien anrechnen
+                                s_time = dt_italy.strftime('%H:%M')
+                            else:
+                                s_time = stop.get('compOrarioArrivo') or stop.get('compOrarioPartenza') or "--:--"
+                                
+                            s_delay = stop.get('ritardoArrivo') or stop.get('ritardoPartenza') or 0
+                            
+                            # Prüfen ob der Zug die Station schon passiert hat
+                            is_done = stop.get('arrivoReale') or stop.get('partenzaReale') or stop.get('effettiva')
+                            dot_color = "#2ecc71" if is_done else "#30363d" # Grün = passiert, Grau = Zukunft
+                            
+                            s_delay_text = f" <span class='stop-delay'>(+{s_delay})</span>" if s_delay > 0 else ""
+                            
+                            st.markdown(f"""
+                                <div class="stop-row">
+                                    <div class="stop-dot" style="background-color: {dot_color};"></div>
+                                    <div class="stop-time">{s_time}</div>
+                                    <div class="stop-station">{stop_name}{s_delay_text}</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        st.warning("Streckenverlauf derzeit nicht verfügbar.")
 else:
-    st.info("Suche nach Zügen...")
+    st.info("Warten auf Live-Daten...")
