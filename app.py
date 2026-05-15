@@ -75,11 +75,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BAHNHÖFE (inkl. Desenzano Del Garda) ---
+# --- BAHNHÖFE (inkl. Verona und Venedig) ---
 STATIONS = {
     "Milano Centrale": "S01700",
     "Roma Termini": "S09218",
-    "Venezia S. Lucia": "S02716",
+    "Venedig (S. Lucia)": "S02716",
+    "Verona Porta Nuova": "S02430",
     "Firenze S.M.N.": "S06421",
     "Napoli Centrale": "S09721",
     "Torino Porta Nuova": "S00219",
